@@ -1,0 +1,26 @@
+version: '3'
+services:
+  mwan3-ip:
+    image: ghcr.io/cp0204/mwan3-ip:latest
+    ports:
+      - "80:80"
+      - "800:80"
+      - "801:80"
+      - "802:80"
+      - "803:80"
+    environment:
+      - PORT=80
+      - CHECK_PORTS=80,800,801,802,803
+    # 或者使用环境变量文件
+    # env_file:
+    #   - .env
+    restart: unless-stopped
+    # 可选：设置容器名称
+    container_name: mwan3-ip
+    # 可选：设置资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M

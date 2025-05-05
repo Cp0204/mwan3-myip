@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP检测</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .group {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+
+        .group-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .ip-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        @media (max-width: 1200px) {
+            .ip-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 900px) {
+            .ip-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .ip-grid {
+                grid-template-columns: 1fr;
+            }
+
+            body {
+                padding: 10px;
+            }
+        }
+
+        .ip-container {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            box-sizing: border-box;
+        }
+
+        .port {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .ip {
+            color: #0066cc;
+            word-break: break-all;
+        }
+
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+
+        .error {
+            color: #cc0000;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>IP检测</h1>
+
+    <div id="wanGroup" class="group">
+        <div class="group-title">多WAN口</div>
+        <div id="ipContainers" class="ip-grid"></div>
+    </div>
+
+    <div id="leakGroup" class="group">
+        <div class="group-title">IP侧漏</div>
+        <div id="leakContainers" class="ip-grid"></div>
+    </div>
+
+    <script>
+        // 获取当前域名
+        const currentDomain = window.location.hostname;
+
+        // IP侧漏检测配置
+        const leakChecks = [
+            { name: '访问大陆', url: 'https://cn.ipcelou.com/api/ip' },
+            { name: '访问香港', url: 'https://hk.ipcelou.com/api/ip' },
+            { name: '访问美国', url: 'https://us.ipcelou.com/api/ip' },
+            { name: '访问谷歌', url: 'https://ipcelou-298103.appspot.com/api/ip' }
+        ];
+
+        async function getPorts() {
+            try {
+                const response = await fetch(`/api/ports`);
+                const data = await response.json();
+                return data.ports;
+            } catch (error) {
+                console.error('Failed to get ports:', error);
+                return [80];
+            }
+        }
+
+        async function fetchIp(port) {
+            try {
+                const response = await fetch(`//${currentDomain}:${port}/api/ip`);
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                return { ip: '无法获取', port };
+            }
+        }
+
+        async function fetchLeakIp(url) {
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.data.Remote_addr;
+            } catch (error) {
+                console.error('Failed to fetch leak IP:', error);
+                return '无法获取';
+            }
+        }
+
+        function createContainer(parent, title) {
+            const div = document.createElement('div');
+            div.className = 'ip-container';
+            div.innerHTML = `
+                <div class="port">${title}</div>
+                <div class="ip loading">加载中...</div>
+            `;
+            parent.appendChild(div);
+            return div;
+        }
+
+        async function displayWanIps() {
+            const container = document.getElementById('ipContainers');
+            container.innerHTML = '';
+            const ports = await getPorts();
+
+            // 先创建所有容器
+            const containers = {};
+            for (const port of ports) {
+                containers[port] = createContainer(container, `访问端口 ${port}`);
+            }
+
+            // 并行获取所有IP
+            const ipPromises = ports.map(port => fetchIp(port));
+            const results = await Promise.all(ipPromises);
+
+            // 更新所有IP显示
+            results.forEach((data, index) => {
+                const port = ports[index];
+                const div = containers[port];
+                const ipElement = div.querySelector('.ip');
+                ipElement.classList.remove('loading');
+                ipElement.textContent = data.ip;
+            });
+        }
+
+        async function displayLeakIps() {
+            const container = document.getElementById('leakContainers');
+            container.innerHTML = '';
+
+            // 先创建所有容器
+            const containers = leakChecks.map(check => ({
+                check,
+                element: createContainer(container, check.name)
+            }));
+
+            // 并行获取所有IP
+            const ipPromises = leakChecks.map(check => fetchLeakIp(check.url));
+            const results = await Promise.all(ipPromises);
+
+            // 更新所有IP显示
+            results.forEach((ip, index) => {
+                const { element } = containers[index];
+                const ipElement = element.querySelector('.ip');
+                ipElement.classList.remove('loading');
+                ipElement.textContent = `${ip}`;
+            });
+        }
+
+        // 页面加载时显示所有IP
+        displayWanIps();
+        displayLeakIps();
+    </script>
+</body>
+
+</html>
